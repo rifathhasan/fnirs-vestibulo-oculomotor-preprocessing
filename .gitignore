@@ -1,0 +1,33 @@
+# Local machine configuration
+config/local_paths.m
+
+# Participant data and derived MATLAB/tabular files
+*.nirs
+*.snirf
+*.mat
+*.xlsx
+*.xls
+*.csv
+*.sav
+*.spv
+
+# MATLAB temporary and interactive files
+*.asv
+*.fig
+*.png
+*.jpg
+*.jpeg
+*.pdf
+
+# Generated outputs (retain repository guidance)
+outputs/*
+!outputs/README.md
+
+# Logs
+logs/
+*.log
+
+# Operating-system metadata
+desktop.ini
+Thumbs.db
+.DS_Store
