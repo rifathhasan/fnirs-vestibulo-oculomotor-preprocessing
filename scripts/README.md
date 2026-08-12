@@ -1,5 +1,5 @@
 # Scripts
 
-No maintained batch entry point is currently provided. The scientific API is composed explicitly from functions under `src/individual` and `src/group`; see the root README and `examples/README.md` for the validated call chain.
+No runner script is included because recording locations and acquisition requirements are specific to each dataset. Use the function sequence in `examples/README.md` to create a local runner.
 
-Machine-specific paths and participant orchestration must remain outside version-controlled scripts.
+Keep machine specific paths and participant labels outside version controlled scripts.

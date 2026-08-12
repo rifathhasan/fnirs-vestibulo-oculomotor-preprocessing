@@ -1,39 +1,40 @@
-# API Walkthrough
+# Usage Guide
 
-This folder documents maintained interfaces without bundling participant recordings or pretending that acquisition-specific requirements can be inferred.
+This guide shows the maintained function sequence. It does not include recording data or acquisition specific values.
 
-## Individual recording
-
-The complete call chain is:
+## Paths and configuration
 
 ```matlab
+addpath('config');
+addpath(fullfile('src', 'individual'));
+addpath(fullfile('src', 'group'));
+
 config = canonical_preprocessing_config();
+```
+
+Place machine specific paths in an ignored `config/local_paths.m` file if a local runner needs them.
+
+## One recording
+
+```matlab
 [recording, adapter_context] = load_fnirs_recording(raw_file);
 validation = validate_raw_recording(recording, requirements);
 [conditions, condition_report] = detect_conditions( ...
-    recording.stimuli, {'EC', 'HS', 'HVOR', 'VVOR'}, expected_trials);
+    recording.stimuli, required_conditions, expected_trials);
+
 operators = homer2_preprocessing_operators(adapter_context.homer2_sd);
 result = preprocess_recording( ...
     recording, validation, conditions, config.individual, operators);
 ```
 
-The caller supplies `raw_file`, acquisition `requirements`, and `expected_trials`. Real preprocessing also requires the compatible Homer2 functions on the MATLAB path. Review acquisition and condition reports before using the derivatives.
+`requirements` must contain the expected sampling rate, sampling rate tolerance, sampling interval tolerance fraction, channel count, and wavelength count. `required_conditions` is a list of exact condition names. `expected_trials` is a nonnegative integer used for the condition count report.
 
-The result contains:
+Review `validation` and `condition_report` before using `result`. The result contains baseline corrected block responses, condition responses, epoch records, and the processing parameters used.
 
-- `condition_hrfs`: baseline-corrected condition averages (`time × channel`);
-- `block_hrfs`: baseline-corrected complete blocks (`time × channel × retained_block`);
-- `epoch_report`: detected/included/excluded block accounting;
-- `preprocessing`: numerical parameters used.
-
-`block_indices` retains original event ordinals. No task-period mean is calculated.
-
-## Group aggregation
+## Participant aggregation
 
 ```matlab
 group_result = aggregate_participant_hrfs(participant_results, config.group);
 ```
 
-`participant_results` must contain at least two compatible structures with `condition_hrfs`. Participant identifiers are optional caller metadata and are not used or returned by the scientific aggregation function.
-
-See the root [README](../README.md) and [canonical methods](../docs/methods.md) for requirements and scientific decisions.
+`participant_results` is a structure vector with at least two elements. Each element must contain compatible `condition_hrfs` from `preprocess_recording`. Participant labels may be stored by calling code, but the aggregation functions do not use or return them.

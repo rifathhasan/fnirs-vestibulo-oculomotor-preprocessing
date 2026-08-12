@@ -1,5 +1,5 @@
-# Synthetic Test Policy
+# Synthetic Test Inputs
 
-Maintained tests use synthetic matrices, temporary `.nirs` fixtures, temporary Homer2 stubs, and injected operator spies. No participant recording or participant-identifiable dataset is required.
+The test suite uses synthetic arrays, temporary `.nirs` fixtures, temporary Homer2 test functions, and injected function handles. No participant recording or identifiable participant data are required.
 
-The tests validate repository interfaces, sequencing, dimensions, parameter forwarding, boundary behavior, and group exclusion. Homer2 stubs do not claim to reproduce or independently validate Homer2 numerical algorithms.
+These inputs test dimensions, parameter forwarding, processing order, boundary behavior, quality control records, and error identifiers. The Homer2 test functions exercise the repository interface and do not independently revalidate Homer2 numerical algorithms.

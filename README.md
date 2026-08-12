@@ -1,103 +1,100 @@
-# fNIRS Vestibulo-Oculomotor Preprocessing
+# fNIRS Vestibulo Oculomotor Preprocessing
 
-A validated MATLAB workflow that converts Homer-style continuous-wave fNIRS recordings into standardized participant block HRFs, participant condition HRFs, and auditable group averages.
+This repository contains MATLAB code for preprocessing continuous wave fNIRS recordings collected during vestibulo oculomotor tasks. The pipeline converts raw optical intensity measurements into HbO and HbR responses, extracts condition specific epochs, preserves individual task blocks, computes participant condition averages, and generates group summaries with pointwise quality control.
 
 ## Overview
 
-This repository contains the maintained preprocessing layer for an fNIRS study of cortical hemodynamic responses during upright vestibulo-oculomotor tasks. It loads continuous-wave intensity data, validates acquisition structure, delegates established numerical operations to Homer2, and produces format-neutral HbO/HbR derivatives for downstream analysis.
+The software accepts Homer `.nirs` recordings and returns hemodynamic response data with explicit time, channel, condition, and block organization. Loading, acquisition validation, condition detection, Homer2 numerical operations, epoch extraction, baseline correction, and group aggregation are implemented as separate functions with documented input and output contracts.
 
-The code is a standardized canonical implementation informed by the final dissertation methods, historical MATLAB/Homer workflows, and downstream analysis requirements. It is not a claim of byte-for-byte reproduction of every historical script. Historical implementations contained version-dependent differences in filtering, operation order, baseline handling, and group exclusion; this repository makes one scientific path explicit and testable.
+The processing functions do not assign biological meaning to the HbO and HbR responses. Acquisition requirements and processing parameters must be reviewed for each study protocol.
 
-This is Repo 1 of the Aim 2 workflow. Statistical inference, ICC reliability, test-retest analysis, significant-channel figures, MNI/anatomical mapping, and cortical visualization belong in the planned companion repository `vestibulo-oculomotor-fnirs-cortical-analysis`.
-
-## Pipeline
+## Processing Pipeline
 
 ```mermaid
 flowchart TD
-    A[Homer-style .nirs raw intensity] --> B[Acquisition validation]
+    A[Raw optical intensity] --> B[Acquisition validation]
     B --> C[Optical density]
-    C --> D[Wavelet correction<br/>IQR = 1]
-    D --> E[One 0.01–0.10 Hz bandpass<br/>motion-corrected OD]
-    E --> F[Modified Beer–Lambert law]
-    F --> G[HbO / HbR]
+    C --> D[Wavelet motion correction]
+    D --> E[0.01 to 0.10 Hz band pass filter]
+    E --> F[Modified Beer Lambert conversion]
+    F --> G[HbO and HbR]
     B --> H[Condition detection]
-    G --> I[−20 to +30 s epoching]
+    G --> I[Epoching from minus 20 to plus 30 seconds]
     H --> I
-    I --> J[Complete-block retention]
-    J --> K[−20 to 0 s baseline correction]
-    K --> L[Block HRFs]
+    I --> J[Complete block retention]
+    J --> K[Baseline correction of each block]
+    K --> L[Participant block responses]
     J --> M[Condition averaging]
-    M --> N[−20 to 0 s baseline correction]
-    N --> O[Participant condition HRFs]
-    O --> P[Group compatibility validation]
-    P --> Q[Pointwise group aggregation and QC]
+    M --> N[Baseline correction of each condition average]
+    N --> O[Participant condition responses]
+    O --> P[Group compatibility checks]
+    P --> Q[Pointwise group aggregation]
 ```
 
 ## Key Features
 
-- Small MATLAB functions with explicit dimensional and metadata contracts.
-- Standardized `.nirs` translation that keeps Homer2 probe context separate from format-neutral recording data.
-- Acquisition validation before numerical preprocessing.
-- Exact-name condition detection without position inference or fuzzy matching.
-- Isolated Homer2 wrapper layer with dependency and output checks.
-- Preservation of complete individual blocks and their original event ordinals.
-- Participant condition-HRF generation with a single baseline convention.
-- Cross-participant compatibility checks and independently audited HbO/HbR aggregation.
-- Synthetic tests covering interfaces, sequencing, edge cases, and error behavior.
-- No participant recordings or participant-identifiable fixtures.
+1. Homer `.nirs` loading with native Homer2 probe metadata kept separate from the standardized recording structure.
+2. Acquisition checks for sampling, measurement, wavelength, and channel structure.
+3. Exact condition name matching and explicit trial count reporting.
+4. Homer2 calls isolated behind small wrapper functions with input and output checks.
+5. Complete block retention with original event ordinals.
+6. Separate participant block responses and condition average responses.
+7. Group compatibility checks for condition names, time vectors, dimensions, and channel order.
+8. Synthetic MATLAB tests for processing boundaries and error behavior.
 
-## Scientific Processing Decisions
+## Processing Parameters
 
-The maintained individual pipeline uses:
+The default configuration applies the following choices:
 
-- wavelet motion correction with IQR `1`;
-- exactly one `0.01–0.10 Hz` bandpass applied to motion-corrected optical density;
-- modified Beer–Lambert conversion to HbO and HbR;
-- epochs from `−20` through `+30 s`, including aligned endpoints;
-- retention of complete epochs only;
-- baseline correction using the mean from `−20` through `0 s`.
+1. Wavelet motion correction with IQR equal to `1`.
+2. One `0.01 to 0.10 Hz` band pass filter applied to motion corrected optical density.
+3. Modified Beer Lambert conversion to HbO and HbR.
+4. An epoch window from minus 20 to plus 30 seconds.
+5. A baseline interval from minus 20 to 0 seconds.
+6. Retention of complete blocks only.
+7. Pointwise group exclusion for values strictly greater than `2` sample standard deviations from the initial mean.
+8. One exclusion pass with no imputation.
+9. Recalculation of the group mean and sample standard deviation from retained values.
 
-The group stage calculates an initial pointwise mean and sample SD (`N−1`) across participants. Values strictly greater than `2 SD` from that candidate-inclusive mean are excluded in one detection pass. Statistics are recalculated from retained values, effective sample size is reported pointwise, and excluded values are not imputed.
+The differential pathlength factor is configurable. The default value in `canonical_preprocessing_config` is `[6 6]`.
 
 ## Outputs
 
-`preprocess_recording` returns:
+`preprocess_recording` returns participant responses and processing records:
 
-| Output | Main dimensions | Purpose |
+| Output | Dimensions | Contents |
 |---|---:|---|
-| `condition_hrfs(k).HbO`, `.HbR` | time × channel | Baseline-corrected participant condition average |
-| `block_hrfs(k).HbO`, `.HbR` | time × channel × retained block | Baseline-corrected complete individual blocks |
-| `epoch_report(k)` | condition-level metadata | Detected, included, and boundary-excluded trial accounting |
-| `preprocessing` | scalar metadata | Numerical parameters actually used |
+| `block_hrfs(k).HbO`, `.HbR` | time x channel x retained block | Baseline corrected complete block responses |
+| `condition_hrfs(k).HbO`, `.HbR` | time x channel | Baseline corrected condition averages |
+| `epoch_report(k)` | one record per condition | Detected, retained, and boundary excluded block counts |
+| `preprocessing` | one structure | Numerical parameters used for the recording |
 
-Each condition and block derivative carries a column time vector and `channel_pairs` in maintained channel order. `block_indices` is a row vector of original within-condition event ordinals, so retained Block 2 remains identifiable as Block 2 even if Block 1 was boundary-excluded. Full block derivatives are retained because downstream analyses may use different task windows; Repo 1 does not embed a task-period summary.
+Each response contains a column `time` vector and a `channel_pairs` matrix that records source and detector indices in the maintained channel order. `block_indices` records the original event ordinal for every retained block. Individual retained blocks are preserved so later analyses can select an appropriate time window.
 
-`aggregate_participant_hrfs` returns group condition HRFs, parallel HbO/HbR outlier reports, and aggregation metadata. Outlier reports include initial/final statistics, masks, and pointwise included/excluded counts. Participant identifiers are neither required nor returned by the scientific functions.
+`aggregate_participant_hrfs` returns group condition responses with dimensions `time x channel`. Its quality control report contains the initial mean, initial sample standard deviation, final sample standard deviation, exclusion mask, and pointwise included and excluded counts for HbO and HbR.
 
 ## Repository Structure
 
 ```text
-config/          Canonical scientific configuration and local-path template
-docs/            Methods, pipeline, and historical-provenance documentation
-examples/        Safe API walkthroughs without participant data
-src/individual/  Loading, validation, Homer2 adapters, epoching, and preprocessing
-src/group/       Pointwise exclusion and compatible participant aggregation
-tests/           MATLAB function-based tests using synthetic fixtures/stubs
-outputs/         Ignored destination for local generated outputs
+config/          Processing parameters and a local path template
+src/individual/  Loading, validation, Homer2 wrappers, epoching, and preprocessing
+src/group/       Pointwise exclusion and participant aggregation
+tests/           MATLAB tests using synthetic inputs and temporary stubs
+docs/            Processing methods and software data flow
+examples/        Function call sequence and input contract notes
+scripts/         Guidance for user maintained runner scripts
 ```
-
-Legacy analysis folders are currently tracked in this working history. They are provenance rather than maintained source and include machine-specific paths and derived CSV/ASV artifacts. They should be removed from the future public branch/history or isolated in a private provenance archive before publication; this documentation update does not alter them.
 
 ## Requirements
 
-- MATLAB R2022b (validated environment).
-- A compatible Homer2 installation for real numerical preprocessing, providing `hmrIntensity2OD`, `hmrMotionCorrectWavelet`, `hmrBandpassFilt`, and `hmrOD2Conc` on the MATLAB path.
+1. MATLAB R2022b, which is the version used for the current test suite.
+2. A compatible Homer2 installation for real preprocessing. The MATLAB path must provide `hmrIntensity2OD`, `hmrMotionCorrectWavelet`, `hmrBandpassFilt`, and `hmrOD2Conc`.
 
-The maintained repository source does not directly call another MATLAB toolbox API. Homer2 may have additional dependencies determined by the installed Homer2 distribution. The synthetic wrapper tests do not execute real Homer2 numerics.
+The maintained source does not directly call another MATLAB toolbox API. A Homer2 installation may have its own dependencies.
 
 ## Quick Start
 
-The following uses the actual maintained interfaces. Acquisition expectations and the input path are intentionally caller-supplied because they are study/acquisition metadata, not inferred defaults.
+The example below follows the maintained function signatures. The caller supplies the recording path and acquisition requirements.
 
 ```matlab
 addpath('config');
@@ -105,14 +102,6 @@ addpath(fullfile('src', 'individual'));
 addpath(fullfile('src', 'group'));
 
 config = canonical_preprocessing_config();
-
-% Caller-supplied, non-versioned inputs:
-% raw_file
-% expected_sampling_rate_hz
-% sampling_rate_tolerance_hz
-% sampling_interval_tolerance_fraction
-% expected_channel_count
-% expected_wavelength_count
 
 [recording, adapter_context] = load_fnirs_recording(raw_file);
 
@@ -133,48 +122,33 @@ participant_result = preprocess_recording( ...
     recording, validation, conditions, config.individual, operators);
 ```
 
-The caller should review both acquisition QC and `condition_report` before treating an output as analysis-ready. To aggregate compatible participant results:
+Review `validation` and `condition_report` before using the participant responses. Compatible participant results can then be aggregated:
 
 ```matlab
 group_result = aggregate_participant_hrfs(participant_results, config.group);
 ```
 
-Here `participant_results` is a struct vector containing the `condition_hrfs` produced for at least two participants. See [examples/README.md](examples/README.md) for contract notes.
+See [examples/README.md](examples/README.md) for the expected input structures.
 
 ## Testing
 
-The current MATLAB R2022b regression at commit `7fa0886` completed with:
+The full MATLAB R2022b test suite currently reports:
 
 ```text
-358 tests
 358 passed
 0 failed
 0 incomplete
 ```
 
-Coverage includes loader translation, acquisition validation, condition detection, Homer2 adapter contracts, epoching, baseline correction, preprocessing orchestration, complete-block preservation, pointwise exclusion, and group aggregation. Homer2 calls are tested with temporary synthetic stubs; these tests validate this repository's boundary behavior, not the independent numerical correctness of Homer2.
-
-## Reproducibility and Provenance
-
-The maintained code standardizes a dissertation workflow after auditing historical MATLAB scripts with inconsistent variants. Scientific choices, known divergence, and output contracts are documented in:
-
-- [Canonical methods](docs/methods.md)
-- [Pipeline overview](docs/pipeline_overview.md)
-- [Historical provenance](docs/historical_provenance.md)
+The suite covers loading, acquisition validation, condition detection, Homer2 wrapper behavior, epoching, baseline correction, block preservation, preprocessing orchestration, and group aggregation. Controlled Homer2 test functions verify the repository boundary behavior. They do not independently revalidate the numerical algorithms provided by Homer2.
 
 ## Data and Privacy
 
-No participant recordings or identifiable participant data should be included. Tests use deterministic synthetic matrices and temporary synthetic `.nirs`/Homer stubs where needed. Machine-specific paths belong only in ignored local configuration such as `config/local_paths.m`.
-
-## Related Scientific Work
-
-This preprocessing workflow supports research on cortical hemodynamic responses during vestibulo-oculomotor tasks. A related manuscript is under review at *Brain Topography*. Scientific findings and publication-result figures are intentionally outside this preprocessing repository.
+No participant recordings or identifiable participant data are included. Tests use synthetic arrays, temporary synthetic `.nirs` fixtures, temporary Homer2 test functions, and injected function handles. Machine specific paths belong in ignored local configuration files such as `config/local_paths.m`.
 
 ## Limitations
 
-- The maintained loader supports MAT-format Homer-style `.nirs` files; SNIRF is not currently supported.
-- Real numerical preprocessing depends on external Homer2 functions.
-- Synthetic wrapper tests do not independently validate Homer2's scientific algorithms.
-- The configured DPF `[6 6]` is historically observed but must be verified against authoritative acquisition records before being described as a confirmed dissertation parameter.
-- This is a canonical maintained implementation, not exact reproduction of every historical script.
-- Scientific inference, ICC, anatomical mapping, and publication figures belong to Repo 2.
+1. Homer2 is an external dependency for real preprocessing.
+2. The maintained loader supports Homer `.nirs` input stored in MATLAB format. SNIRF loading is not implemented.
+3. Processing parameters should be reviewed before applying the workflow to a different acquisition protocol.
+4. No participant data are distributed with the repository.

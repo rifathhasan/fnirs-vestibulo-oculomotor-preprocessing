@@ -1,67 +1,76 @@
 # Pipeline Overview
 
-## Component boundaries
+## Software data flow
 
 ```text
 load_fnirs_recording
-  -> standardized recording + separate Homer2 adapter context
+  -> recording
+  -> adapter_context
 
-validate_raw_recording
-  -> structural/acquisition report
+validate_raw_recording(recording, requirements)
+  -> validation
 
-detect_conditions
-  -> exact-name condition definitions + trial-count report
+detect_conditions(recording.stimuli, required_conditions, expected_trials)
+  -> conditions
+  -> condition_report
 
-homer2_preprocessing_operators
-  -> isolated external numerical operators
+homer2_preprocessing_operators(adapter_context.homer2_sd)
+  -> operators
 
-preprocess_recording
-  -> condition_hrfs + block_hrfs + epoch_report + preprocessing metadata
+preprocess_recording(recording, validation, conditions, config.individual, operators)
+  -> condition_hrfs
+  -> block_hrfs
+  -> epoch_report
+  -> preprocessing
 
-aggregate_participant_hrfs
-  -> group condition_hrfs + outlier reports + aggregation metadata
+aggregate_participant_hrfs(participant_results, config.group)
+  -> group condition_hrfs
+  -> outlier_report
+  -> aggregation
 ```
 
-Loading, acquisition validation, and condition detection remain outside `preprocess_recording`; this separation prevents the orchestrator from inferring file format, acquisition requirements, or condition mappings.
+Loading, acquisition validation, and condition detection occur before the numerical preprocessing call. This keeps file translation, acquisition requirements, and condition definitions explicit at the calling boundary.
 
-## Individual sequence
+## Individual recording flow
 
 ```text
-raw intensity
+raw optical intensity
 -> optical density
--> wavelet motion correction (IQR = 1)
--> exactly one 0.01–0.10 Hz bandpass on motion-corrected OD
--> modified Beer–Lambert conversion
--> continuous HbO/HbR
--> complete epoch extraction (−20 to +30 s)
--> condition average (no baseline subtraction in Stage C)
--> baseline correction (−20 to 0 s)
--> participant condition HRFs
+-> wavelet motion correction
+-> 0.01 to 0.10 Hz band pass filtering
+-> modified Beer Lambert conversion
+-> continuous HbO and HbR
+-> complete epoch extraction
 ```
 
-The same complete epochs also follow a parallel derivative path:
+Complete epochs produce two participant outputs:
 
 ```text
-complete unaveraged HbO/HbR epochs
--> baseline correction of each block (−20 to 0 s)
--> participant block HRFs
+complete epochs
+-> baseline correction of each block
+-> block_hrfs
+
+complete epochs
+-> condition average
+-> baseline correction of the average
+-> condition_hrfs
 ```
 
-`block_indices` preserves original event ordinals after boundary exclusions. The arithmetic mean of baseline-corrected blocks agrees with the baseline-corrected condition average within floating-point tolerance because the baseline and averaging operations are linear.
+Both paths use the same time vector, channel order, and baseline interval. `block_indices` links each retained block to its original condition event ordinal. `epoch_report` records boundary exclusions and trial counts.
 
-## Group sequence
+## Group flow
 
 ```text
-compatible participant condition HRFs
--> time × channel × participant stack
--> initial pointwise mean and sample SD (N−1)
--> strict > threshold exclusion mask, one pass
--> no imputation
--> final pointwise mean, sample SD, and effective N
+compatible participant condition_hrfs
+-> time x channel x participant arrays
+-> initial pointwise mean and sample standard deviation
+-> one strict threshold comparison
+-> exclusion mask
+-> final mean, sample standard deviation, and pointwise counts
 ```
 
-Outlier detection is independent across condition, chromophore, time, and channel. A participant excluded at one point remains eligible everywhere else.
+HbO and HbR are processed independently. The group output preserves the first participant's condition order and channel order. No value is imputed.
 
-## Configuration
+## Configuration boundary
 
-Scientific parameters are stored in `config/canonical_preprocessing_config.m`. Acquisition expectations are intentionally caller-supplied to `validate_raw_recording`; they are not inferred or silently replaced by nominal study values.
+`config/canonical_preprocessing_config.m` stores individual and group processing parameters. Acquisition expectations remain caller supplied because they depend on the recording protocol. Local paths belong in an ignored `config/local_paths.m` file created from `config/local_paths.example.m`.
